@@ -6,6 +6,11 @@
 #define TCP_PORT 50007
 #define BUFFER_SIZE 256
 #define MAX_RETRIES 5
+#define MAX_CLIENTS 3
+#define CLIENT_TASK_STACK_SIZE (1024 * 4)
+#define CLIENT_TASK_PRIORITY 2
+#define SERVER_RECOVERY_DELAY_MS 5000
+#define CLIENT_TIMEOUT_MS 80000  // 80 segundos timeout por cliente
 // Pines
 /* PDM/PCM Pins */
 #define PDM_DATA P10_5

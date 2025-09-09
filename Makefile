@@ -7,7 +7,7 @@
 #
 ################################################################################
 # \copyright
-# Copyright 2020-2024, Cypress Semiconductor Corporation (an Infineon company)
+# Copyright 2024-2025, Cypress Semiconductor Corporation (an Infineon company)
 # SPDX-License-Identifier: Apache-2.0
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,8 +21,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-################################################################################
 
+################################################################################
 
 ################################################################################
 # Basic Configuration
@@ -46,7 +46,7 @@ TARGET=APP_CY8CKIT-062S2-AI
 #
 # If APPNAME is edited, ensure to update or regenerate launch
 # configurations for your IDE.
-APPNAME=mtb-example-wifi-tcp-server
+APPNAME=mtb-example-ml-deepcraft-deploy-audio
 
 # Name of toolchain to use. Options include:
 #
@@ -70,6 +70,8 @@ CONFIG=Debug
 # If set to "true" or "1", display full command-lines when building.
 VERBOSE=
 
+# Only GCC_ARM toolchain is supported in this version of the code example
+MTB_SUPPORTED_TOOLCHAINS?=GCC_ARM
 
 ################################################################################
 # Advanced Configuration
@@ -84,15 +86,8 @@ VERBOSE=
 #
 # ... then code in directories named COMPONENT_foo and COMPONENT_bar will be
 # added to the build
-
-# Chose desired RTOS environment. Available options - FREERTOS
-COMPONENTS=FREERTOS
-
-# Include additional components based on the selected environment
-ifeq ($(findstring FREERTOS, $(COMPONENTS)), FREERTOS)
-    COMPONENTS+=LWIP MBEDTLS SECURE_SOCKETS
-    $(info RTOS is FreeRTOS)
-endif
+#
+COMPONENTS=ML_TFLM CMSIS_DSP ML_INT8x8 FREERTOS LWIP MBEDTLS 
 
 # Like COMPONENTS, but disable optional code that was enabled by default.
 DISABLE_COMPONENTS=
@@ -105,30 +100,16 @@ SOURCES=
 
 # Like SOURCES, but for include directories. Value should be paths to
 # directories (without a leading -I).
-INCLUDES=
+INCLUDES=./configs
 
-ifeq ($(findstring FREERTOS, $(COMPONENTS)), FREERTOS)
 # Custom configuration of mbedtls library.
-MBEDTLSFLAGS=MBEDTLS_USER_CONFIG_FILE='"mbedtls_user_config.h"'
-DEFINES+=$(MBEDTLSFLAGS)
-endif
+MBEDTLSFLAGS = MBEDTLS_USER_CONFIG_FILE='"mbedtls_user_config.h"'
 
 # Add additional defines to the build process (without a leading -D).
-DEFINES+= CYBSP_WIFI_CAPABLE CY_RETARGET_IO_CONVERT_LF_TO_CRLF CY_RTOS_AWARE
-
-
-# CY8CPROTO-062-4343W board shares the same GPIO for the user button (SW2)
-# and the CYW4343W host wake up pin. Since this example uses the GPIO for
-# interfacing with the user button, the SDIO interrupt to wake up the host is
-# disabled by setting CY_WIFI_HOST_WAKE_SW_FORCE to '0'.
-#
-# If you wish to enable this host wake up feature, Comment DEFINES+=CY_WIFI_HOST_WAKE_SW_FORCE=0.
-# If you want this feature on CY8CPROTO-062-4343W, change the GPIO pin for USER BTN
-# in design/hardware & Comment DEFINES+=CY_WIFI_HOST_WAKE_SW_FORCE=0.
+DEFINES=ARM_MATH_DSP ARM_MATH_LOOPUNROLL TF_LITE_STATIC_MEMORY $(MBEDTLSFLAGS) CYBSP_WIFI_CAPABLE CY_RETARGET_IO_CONVERT_LF_TO_CRLF CY_RTOS_AWARE
 DEFINES+=CY_WIFI_HOST_WAKE_SW_FORCE=0
-
 # Select softfp or hardfp floating point. Default is softfp.
-VFP_SELECT=
+VFP_SELECT=hardfp
 
 # Additional / custom C compiler flags.
 #
@@ -163,9 +144,6 @@ PREBUILD=
 # Custom post-build commands to run.
 POSTBUILD=
 
-# To change the default policy
-CY_SECURE_POLICY_NAME=policy_single_CM0_CM4_smif_swap
-
 
 ################################################################################
 # Paths
@@ -189,11 +167,13 @@ CY_GETLIBS_SHARED_PATH=../
 #
 CY_GETLIBS_SHARED_NAME=mtb_shared
 
-# Absolute path to the compiler's "bin" directory.
+# Absolute path to the compiler's "bin" directory. The variable name depends on the
+# toolchain used for the build. Refer to the ModusToolbox user guide to get the correct
+# variable name for the toolchain used in your build.
 #
 # The default depends on the selected TOOLCHAIN (GCC_ARM uses the ModusToolbox
 # software provided compiler by default).
-CY_COMPILER_PATH=
+CY_COMPILER_GCC_ARM_DIR=
 
 
 # Locate ModusToolbox helper tools folders in default installation

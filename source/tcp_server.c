@@ -7,15 +7,8 @@
 #include "cy_nw_helper.h"
 #include <string.h>
 #include "tcp_server.h"
+#include "config.h"
 
-/*******************************************************************************
-* Simplified Configuration - Only Essentials
-*******************************************************************************/
-#define WIFI_SSID                    "Infinitum9609"
-#define WIFI_PASSWORD                "ct5QY42dR9"
-#define TCP_PORT                     50007
-#define BUFFER_SIZE                  256
-#define MAX_RETRIES                  5
 
 /*******************************************************************************
 * Simplified Global Variables
@@ -59,7 +52,7 @@ static cy_rslt_t connect_wifi(void)
         result = cy_wcm_connect_ap(&params, &ip);
         
         if (result == CY_RSLT_SUCCESS) {
-            printf("WiFi connected. IP: %lu.%lu.%lu.%lu\n", 
+            printf("WiFi IP: %lu.%lu.%lu.%lu\n", 
                    (ip.ip.v4 >> 0) & 0xFF,
                    (ip.ip.v4 >> 8) & 0xFF,
                    (ip.ip.v4 >> 16) & 0xFF,
@@ -169,7 +162,7 @@ void tarea_TCPserver(void *arg)
 {
     cy_rslt_t result;
     
-    printf("Starting TCP server...\n");
+    printf("== TCP Server ==\n");
     
     // Step 1: Connect WiFi
     result = connect_wifi();

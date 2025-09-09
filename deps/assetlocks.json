@@ -32,10 +32,6 @@
         "locked-commit": "release-v3.6.2"
     },
     {
-        "asset-name": "cy-mbedtls-acceleration",
-        "locked-commit": "release-v1.6.0"
-    },
-    {
         "asset-name": "device-db",
         "locked-commit": "release-v4.28.0"
     },

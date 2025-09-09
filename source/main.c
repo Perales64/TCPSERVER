@@ -5,15 +5,12 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include "tcp_server.h"
-
-#define TASK_STACK_SIZE    (1024 * 5)  // 5KB stack
-#define TASK_PRIORITY      (1)         // Low priority
+#include "ia.h"
 
 int main(void)
 {
-    cy_rslt_t result;
 
-    printf("=== TCP Server ===\n");
+    cy_rslt_t result;
 
     // Step 1: Initialize board
     result = cybsp_init();
@@ -28,21 +25,33 @@ int main(void)
 
     // Step 4: Create single task
     BaseType_t task_result = xTaskCreate(
-        tarea_TCPserver,        // Task function
-        "TCP_Server",           // Task name
-        TASK_STACK_SIZE,        // Stack size
-        NULL,                   // Parameters
-        TASK_PRIORITY,          // Priority
-        NULL                    // Task handle (not needed)
+        tarea_TCPserver, // Task function
+        "TCP_Server",    // Task name
+        (1024 * 5),      // 5KB Stack size
+        NULL,            // Parameters
+        (2),             // Priority
+        NULL             // Task handle (not needed)
+    );
+    BaseType_t task_result2 = xTaskCreate(
+        tarea_ia,    // Task function
+        "IA_Task",   // Task name
+        (1024 * 50), // 50KB Stack size
+        NULL,        // Parameters
+        (3),         // Priority
+        NULL         // Task handle (not needed)
     );
 
     // Check task creation
-    if (task_result != pdPASS) {
+    if (task_result != pdPASS)
+    {
         printf("ERROR: TCP no creado\n");
         CY_ASSERT(0);
     }
-
-    printf("TCP Server task created successfully\n");
+    if (task_result2 != pdPASS)
+    {
+        printf("ERROR: TCP no creado\n");
+        CY_ASSERT(0);
+    }
 
     // Step 5: Start scheduler
     vTaskStartScheduler();

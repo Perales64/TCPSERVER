@@ -61,7 +61,7 @@
 #include "mtb_ml_model.h"
 #include "mtb_ml.h"
 
-#include "model.h"
+#include "model1audio.h"
 
 #ifdef __GNUC__
 #define ALIGNED(x) __attribute__((aligned(x)))

@@ -8,7 +8,7 @@
 #include <float.h>
 #include <math.h>
 
-#include <models/model.h>
+#include <models/model1audio.h>
 #include "config.h"
 #include "ia.h"
 

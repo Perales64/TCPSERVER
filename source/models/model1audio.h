@@ -89,7 +89,7 @@ typedef int64_t q63_t;       // 64-bit fractional data type in Q1.63 format.
 #define IMAI_DATA_OUT_SHIFT 4
 #define IMAI_DATA_OUT_OFFSET 0
 #define IMAI_DATA_OUT_SCALE 1
-#define IMAI_DATA_OUT_SYMBOLS {"unlabelled", "sirens"}
+#define IMAI_DATA_OUT_SYMBOLS {"Desconocido", "Sirena"}
 
 // data_in [1] (4 bytes)
 #define IMAI_DATA_IN_RANK (1)

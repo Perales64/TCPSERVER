@@ -69,7 +69,7 @@ int main(void)
         (3),          // Priority
         NULL          // Task handle (not needed)
     );
-
+    printf("\x1b[0m");
     // Check task creation
     if (task_result != pdPASS || task_result2 != pdPASS || task_result3 != pdPASS)
     {

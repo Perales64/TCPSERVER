@@ -15,6 +15,11 @@
 /* PDM/PCM Pins */
 #define PDM_DATA P10_5
 #define PDM_CLK P10_4
+#define NUM_OUTPUTS (4)
+#define OUT1 P9_0
+#define OUT2 P9_1
+#define OUT3 P9_2
+#define OUT4 P9_3
 // Microfono
 #define SAMPLE_RATE_HZ 16000
 #define AUDIO_SYS_CLOCK_HZ 24576000

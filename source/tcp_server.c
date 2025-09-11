@@ -6,8 +6,10 @@
 #include "cy_wcm.h"
 #include "cy_nw_helper.h"
 #include <string.h>
+#include <queue.h>
 #include "tcp_server.h"
 #include "config.h"
+#include "types.h"
 
 // TIPOS Y ENUMERACIONES
 typedef enum {
@@ -32,6 +34,7 @@ typedef struct {
     uint32_t client_id;
     uint32_t last_activity;
     cy_socket_sockaddr_t peer_addr;
+    task_params_t *params; // Agregar parámetros de colas
 } client_info_t;
 
 typedef struct {
@@ -51,8 +54,9 @@ static SemaphoreHandle_t clients_mutex;
 static bool server_running = false;
 static uint32_t next_client_id = 1;
 static error_stats_t error_stats = {0};
+static task_params_t *global_params; // Parámetros globales
 
-// FUNCIONES DE MANEJO DE ERRORES
+// FUNCIONES DE MANEJO DE ERRORES (mantener las mismas)
 
 static error_type_t classify_error(cy_rslt_t error_code) {
     if (error_code == CY_RSLT_MODULE_SECURE_SOCKETS_TIMEOUT ||
@@ -175,7 +179,7 @@ static void cleanup_disconnected_clients(void) {
     }
 }
 
-// TAREA DE CLIENTE
+// TAREA DE CLIENTE ACTUALIZADA
 
 static void client_task(void *param) {
     int client_index = (int)(intptr_t)param;
@@ -194,6 +198,10 @@ static void client_task(void *param) {
     client->state = CLIENT_STATE_ACTIVE;
     client->last_activity = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
+    // Enviar mensaje de bienvenida
+    const char *welcome_msg = "Conectado al servidor de control\nComandos: 1_ON, 1_OFF, 2_ON, 2_OFF, 3_ON, 3_OFF, 4_ON, 4_OFF, ALL_ON, ALL_OFF, STATUS\n";
+    cy_socket_send(client->socket, welcome_msg, strlen(welcome_msg), CY_SOCKET_FLAGS_NONE, &bytes_sent);
+
     while (client->state == CLIENT_STATE_ACTIVE) {
         uint32_t current_time = xTaskGetTickCount() * portTICK_PERIOD_MS;
         
@@ -201,6 +209,25 @@ static void client_task(void *param) {
             printf("Cliente %lu - tiempo de espera agotado\n", client->client_id);
             client->state = CLIENT_STATE_TIMEOUT;
             break;
+        }
+
+        // Verificar si hay respuestas del sistema de control
+        message_t response_msg;
+        if (xQueueReceive(client->params->queue_control_to_tcp, &response_msg, 0) == pdTRUE) {
+            // Solo procesar si es para este cliente
+            if (response_msg.value == client->client_id || response_msg.value == 0) {
+                char response_buffer[BUFFER_SIZE];
+                snprintf(response_buffer, sizeof(response_buffer), "%s\n> ", response_msg.data);
+                
+                result = cy_socket_send(client->socket, response_buffer, strlen(response_buffer),
+                                      CY_SOCKET_FLAGS_NONE, &bytes_sent);
+                
+                if (result == CY_RSLT_SUCCESS) {
+                    printf("TCP: Respuesta enviada a cliente %lu: %s\n", client->client_id, response_msg.data);
+                } else {
+                    printf("TCP: Error enviando respuesta a cliente %lu\n", client->client_id);
+                }
+            }
         }
 
         memset(buffer, 0, sizeof(buffer));
@@ -211,12 +238,31 @@ static void client_task(void *param) {
             buffer[bytes_received] = '\0';
             client->last_activity = current_time;
             
+            // Limpiar caracteres de nueva línea
+            char *newline = strchr(buffer, '\n');
+            if (newline) *newline = '\0';
+            newline = strchr(buffer, '\r');
+            if (newline) *newline = '\0';
+            
             printf("\x1b[38;5;214m");
             printf("Cliente %lu (%lu.%lu.%lu.%lu) envió: %s\n", client->client_id,
                    (client->peer_addr.ip_address.ip.v4 >> 0) & 0xFF,
                    (client->peer_addr.ip_address.ip.v4 >> 8) & 0xFF,
                    (client->peer_addr.ip_address.ip.v4 >> 16) & 0xFF,
                    (client->peer_addr.ip_address.ip.v4 >> 24) & 0xFF, buffer);
+            
+            // Enviar comando al sistema de control
+            message_t control_msg;
+            control_msg.command = CMD_TCP_TO_CONTROL;
+            control_msg.value = client->client_id;
+            strncpy(control_msg.data, buffer, sizeof(control_msg.data) - 1);
+            control_msg.data[sizeof(control_msg.data) - 1] = '\0';
+            
+            if (xQueueSend(client->params->queue_tcp_to_control, &control_msg, pdMS_TO_TICKS(1000)) != pdTRUE) {
+                printf("TCP: Error enviando comando al sistema de control\n");
+                const char *error_msg = "Error interno del servidor\n> ";
+                cy_socket_send(client->socket, error_msg, strlen(error_msg), CY_SOCKET_FLAGS_NONE, &bytes_sent);
+            }
         }
         else if (result == CY_RSLT_MODULE_SECURE_SOCKETS_TIMEOUT) {
             continue;
@@ -242,7 +288,7 @@ static void client_task(void *param) {
     vTaskDelete(NULL);
 }
 
-// FUNCIONES DE CONEXIÓN
+// FUNCIONES DE CONEXIÓN (mantener las mismas pero actualizar accept_new_client)
 
 static void accept_new_client(void) {
     cy_socket_sockaddr_t peer_addr;
@@ -263,6 +309,7 @@ static void accept_new_client(void) {
                 clients[client_index].client_id = next_client_id++;
                 clients[client_index].peer_addr = peer_addr;
                 clients[client_index].last_activity = xTaskGetTickCount() * portTICK_PERIOD_MS;
+                clients[client_index].params = global_params; // Asignar parámetros
 
                 char task_name[20];
                 snprintf(task_name, sizeof(task_name), "Cliente_%lu", clients[client_index].client_id);
@@ -378,7 +425,7 @@ static cy_rslt_t create_server_socket(void) {
     return CY_RSLT_SUCCESS;
 }
 
-// FUNCIONES DE MONITOREO Y ESTADO
+// FUNCIONES DE MONITOREO Y ESTADO (mantener la misma)
 
 static void print_server_status(void) {
     static uint32_t last_status_time = 0;
@@ -413,6 +460,9 @@ static void print_server_status(void) {
 // FUNCIÓN PRINCIPAL DEL SERVIDOR
 void tarea_TCPserver(void *arg) {
     cy_rslt_t result;
+    
+    // Guardar parámetros globalmente
+    global_params = (task_params_t *)arg;
 
     memset(clients, 0, sizeof(clients));
     for (int i = 0; i < MAX_CLIENTS; i++) {

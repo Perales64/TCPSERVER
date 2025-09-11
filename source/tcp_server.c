@@ -161,11 +161,7 @@ static bool handle_error_enhanced(const char *context, cy_rslt_t error_code, boo
     }
 }
 
-/*******************************************************************************
- * Function: get_free_client_slot
- * Finds an available client slot
- *******************************************************************************/
-static int get_free_client_slot(void)
+static int obtener_ranura_cliente_libre(void)
 {
     if (xSemaphoreTake(clients_mutex, pdMS_TO_TICKS(100)) == pdTRUE)
     {
@@ -182,11 +178,7 @@ static int get_free_client_slot(void)
     return -1; // No free slots
 }
 
-/*******************************************************************************
- * Function: cleanup_client
- * Cleans up client resources
- *******************************************************************************/
-static void cleanup_client(int client_index)
+static void limpiar_cliente(int client_index)
 {
     if (client_index < 0 || client_index >= MAX_CLIENTS)
         return;
@@ -585,8 +577,7 @@ void tarea_TCPserver(void *arg)
     // Main server loop
     while (server_running)
     {
-        // Accept new clients
-        accept_new_client();
+        aceptar_nuevo_cliente();
 
         // Clean up disconnected clients
         cleanup_disconnected_clients();

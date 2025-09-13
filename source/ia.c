@@ -124,7 +124,7 @@ cy_rslt_t init_ml_model(void)
     }
     else
     {
-        printf("ERROR: Fallo en inicialización del modelo ML\n");
+        printf("ERROR: Fallo en inicializaciÃ³n del modelo ML\n");
     }
 
     return result;
@@ -331,9 +331,9 @@ void print_ml_results(ml_result_t *result)
 {
     static int16_t prev_best_label = 0;
     int16_t final_best_label = result->best_label;
-    printf("\x1b[32m");
+    printf("\x1b[36m");
     /* Print all label scores */
-    printf("\r--- Resultados ML ---\n");
+    printf("\r--- Resultados ML ---");
 
     /* Post-processing for stable detection */
     if (prev_best_label != 0 && result->scores[prev_best_label] > 0.05f)
@@ -345,12 +345,12 @@ void print_ml_results(ml_result_t *result)
         prev_best_label = result->best_label;
     }
 
-    printf("\nDetectado: %s (%.3f)\n",
+    printf("\nDetectado: %s %.1f%%\n",
            result->labels[final_best_label],
-           result->scores[final_best_label]);
+           result->scores[final_best_label]*100);
     printf("Volumen: %.4f (%.2f)\n", sample_max_slow * 0.8f, sample_max_slow);
     printf("------------------------\n\n");
-    for (int icursor = 0; icursor < 6; icursor++)
+    for (int icursor = 0; icursor < 5; icursor++)
     {
         printf("\033[1A");
         printf("\033[2K");

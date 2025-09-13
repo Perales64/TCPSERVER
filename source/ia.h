@@ -20,7 +20,7 @@ typedef struct {
 * Function Prototypes
 *******************************************************************************/
 void tarea_ia(void *arg);
-
+void send_detection_to_tcp(ml_result_t *result);
 /* Audio initialization functions */
 cy_rslt_t init_audio_system(cyhal_pdm_pcm_t* pdm_pcm);
 cy_rslt_t init_ml_model(void);

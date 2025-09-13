@@ -11,6 +11,8 @@
 #define CLIENT_TASK_PRIORITY 2
 #define SERVER_RECOVERY_DELAY_MS 5000
 #define CLIENT_TIMEOUT_MS 80000  // 80 segundos timeout por cliente
+#define FAST_QUEUE_TIMEOUT   pdMS_TO_TICKS(25)   // Para operaciones críticas
+#define NORMAL_QUEUE_TIMEOUT pdMS_TO_TICKS(100)  // Para operaciones normales
 // Pines
 /* PDM/PCM Pins */
 #define PDM_DATA P10_5
@@ -30,7 +32,7 @@
 #define AUDIO_BUFFER_SIZE 512
 #define SAMPLE_NORMALIZE(sample) (((float)(sample)) / (float)(1 << (AUIDO_BITS_PER_SAMPLE - 1)))
 // Disparador ML
-#define ML_TRIGGER_THRESHOLD 0.85f
+#define ML_TRIGGER_THRESHOLD 0.95f
 #define ML_TRIGGER_LABEL_INDEX 1
 
 #endif /* CONFIG_H */

@@ -11,6 +11,7 @@
 #include <models/model1audio.h>
 #include "config.h"
 #include "ia.h"
+#include "types.h"
 
 /*******************************************************************************
  * DEEPCRAFT compatibility defines
@@ -59,6 +60,14 @@ void tarea_ia(void *arg)
     cyhal_pdm_pcm_t pdm_pcm;
     ml_result_t ml_result;
     cy_rslt_t result;
+    task_params_t *ia_params = (task_params_t *)arg;  // Obtener parámetros
+
+    /* Verificar que los parámetros son válidos */
+    if (ia_params == NULL || ia_params->queue_tcp_to_control == NULL) {
+        printf("ERROR: Parámetros inválidos en tarea IA\n");
+        vTaskDelete(NULL);
+        return;
+    }
 
     /* Initialize ML model */
     result = init_ml_model();
@@ -78,6 +87,8 @@ void tarea_ia(void *arg)
         return;
     }
 
+    printf("Sistema IA inicializado correctamente\n");
+
     /* Main processing loop */
     while (true)
     {
@@ -92,16 +103,30 @@ void tarea_ia(void *arg)
             /* Check if trigger condition is met */
             if (check_ml_trigger(&ml_result))
             {
-                printf(">>> COMANDO DETECTADO: %s (Confianza: %.3f) <<<\n\n",
-                       ml_result.labels[ml_result.best_label], ml_result.max_score);
+                printf("COMANDO DETECTADO: %s (Confianza: %.2f %%) <<<\n\n",
+                       ml_result.labels[ml_result.best_label], ml_result.max_score*100);
 
-                /* Here you could add code to send notification to TCP server */
-                /* or perform any other action when command is detected */
+                // ENVÍO AUTOMÁTICO DE ALL_OFF AL DETECTAR VOZ
+                message_t voice_command = {
+                    .command = CMD_TCP_TO_CONTROL,
+                    .value = 0,  // Broadcast a todos los clientes
+                    .data = "ALL_OFF"
+                };
+                
+                // Enviar comando a la cola de control
+                BaseType_t send_result = xQueueSend(ia_params->queue_tcp_to_control, 
+                                                   &voice_command, pdMS_TO_TICKS(100));
+                
+                if (send_result == pdTRUE) {
+                    printf("Comando ALL_OFF enviado por detección de voz\n");
+                } else {
+                    printf("Error: No se pudo enviar comando por voz (cola llena)\n");
+                }
             }
         }
 
         /* Small delay to prevent CPU saturation */
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(35));
     }
 }
 
@@ -329,27 +354,17 @@ bool check_ml_trigger(ml_result_t *result)
  *******************************************************************************/
 void print_ml_results(ml_result_t *result)
 {
-    static int16_t prev_best_label = 0;
-    int16_t final_best_label = result->best_label;
     printf("\x1b[36m");
-    /* Print all label scores */
     printf("\r--- Resultados ML ---");
 
-    /* Post-processing for stable detection */
-    if (prev_best_label != 0 && result->scores[prev_best_label] > 0.05f)
-    {
-        final_best_label = prev_best_label;
-    }
-    else if (result->best_label != 0 && result->max_score >= 0.50f)
-    {
-        prev_best_label = result->best_label;
-    }
-
+    // Usar directamente el mejor resultado encontrado
     printf("\nDetectado: %s %.1f%%\n",
-           result->labels[final_best_label],
-           result->scores[final_best_label]*100);
+           result->labels[result->best_label],
+           result->max_score * 100);
+           
     printf("Volumen: %.4f (%.2f)\n", sample_max_slow * 0.8f, sample_max_slow);
     printf("------------------------\n\n");
+    
     for (int icursor = 0; icursor < 5; icursor++)
     {
         printf("\033[1A");

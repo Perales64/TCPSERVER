@@ -1,37 +1,29 @@
-#ifndef TYPES_H
-#define TYPES_H
+// types.h - Verificar que existan estas definiciones
+#ifndef TYPES_H_
+#define TYPES_H_
 
-#include <stdint.h>
+#include "cyhal.h"
 #include <stdbool.h>
-#include "FreeRTOS.h"
-#include "queue.h"
 
-// Estructura para pasar las colas entre tareas
+// Comandos para comunicación entre tareas
+typedef enum {
+    CMD_TCP_TO_CONTROL = 1,
+    CMD_CONTROL_TO_TCP = 2,
+    CMD_IA_TO_TCP = 3
+} command_type_t;
+
+// Estructura de mensaje para colas
+typedef struct {
+    command_type_t command;
+    uint32_t value;  // ID de cliente o otros datos
+    char data[64];   // Datos del mensaje
+} message_t;
+
+// Parámetros para las tareas (punteros a colas)
 typedef struct {
     QueueHandle_t queue_tcp_to_control;
     QueueHandle_t queue_control_to_tcp;
     QueueHandle_t queue_ia_to_tcp;
 } task_params_t;
 
-// Estructura para los mensajes entre tareas
-typedef struct
-{
-    uint8_t command;        // Tipo de comando (ver defines abajo)
-    char data[64];         // Datos del comando (texto del comando)
-    uint32_t value;        // Para client ID u otros valores numéricos
-} message_t;
-
-// Estructura para entradas de comandos (usada en control.c)
-typedef struct {
-    const char* cmd;       // Comando como string
-    int output_num;        // Número de salida (0 = todas, 1-4 = específica)
-    bool state;           // Estado deseado (true = ON, false = OFF)
-    bool is_status_cmd;   // Si es comando de estado
-} command_entry_t;
-
-// Defines para tipos de comandos entre tareas
-#define CMD_IA_TO_TCP 1         // Comando de IA a TCP
-#define CMD_TCP_TO_CONTROL 2    // Comando de TCP a Control
-#define CMD_CONTROL_TO_TCP 3    // Respuesta de Control a TCP
-
-#endif /* TYPES_H */
+#endif /* TYPES_H_ */

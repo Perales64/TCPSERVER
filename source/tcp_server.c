@@ -66,11 +66,33 @@ static SemaphoreHandle_t clients_mutex;
 static bool server_running = false;
 static uint32_t next_client_id = 1;
 static error_stats_t error_stats = {0};
-static task_params_t *global_params; // ParÃ¡metros globales
+static task_params_t *global_params; // Parámetros globales
 static response_buffer_t response_buffers[MAX_CLIENTS];
 
 // FUNCIONES DE MANEJO DE ERRORES (mantener las mismas)
+static void broadcast_to_clients(const char *message)
+{
+    if (xSemaphoreTake(clients_mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+    {
+        for (int i = 0; i < MAX_CLIENTS; i++)
+        {
+            if (clients[i].state == CLIENT_STATE_ACTIVE &&
+                clients[i].socket != CY_SOCKET_INVALID_HANDLE)
+            {
+                uint32_t bytes_sent;
+                char formatted_msg[128];
 
+                // Formatear mensaje con prompt
+                snprintf(formatted_msg, sizeof(formatted_msg),
+                         "\n\x1b[31m[COMANDO POR VOZ] %s\x1b[0m\n> ", message);
+
+                cy_socket_send(clients[i].socket, formatted_msg, strlen(formatted_msg),
+                               CY_SOCKET_FLAGS_NONE, &bytes_sent);
+            }
+        }
+        xSemaphoreGive(clients_mutex);
+    }
+}
 static error_type_t classify_error(cy_rslt_t error_code)
 {
     if (error_code == CY_RSLT_MODULE_SECURE_SOCKETS_TIMEOUT ||
@@ -219,15 +241,22 @@ static bool process_control_responses(client_info_t *client, int client_index)
     response_buffer_t *rb = &response_buffers[client_index];
     bool has_responses = false;
 
-    // Leer mÃºltiples respuestas de una vez (batch processing)
+    // Lear múltiples respuestas de una vez
     while (xQueueReceive(client->params->queue_control_to_tcp, &response_msg, 0) == pdTRUE)
     {
-        // Solo procesar si es para este cliente o broadcast
+        // Verificar si es un comando de voz (broadcast a todos)
+        if (response_msg.value == 0) // Valor 0 indica broadcast
+        {
+            printf("Broadcasting comando de voz: %s\n", response_msg.data);
+            broadcast_to_clients(response_msg.data);
+            continue; // No almacenar en buffer individual
+        }
+
+        // Procesar respuestas normales para este cliente
         if (response_msg.value == client->client_id || response_msg.value == 0)
         {
-            // Almacenar en buffer circular
             if (rb->count < 8)
-            { // Buffer no lleno
+            {
                 rb->messages[rb->head] = response_msg;
                 rb->head = (rb->head + 1) % 8;
                 rb->count++;
@@ -327,7 +356,6 @@ static void process_client_command(client_info_t *client, char *buffer, size_t b
                        CY_SOCKET_FLAGS_NONE, &bytes_sent);
     }
 }
-
 static void client_task(void *param)
 {
 
@@ -351,25 +379,25 @@ static void client_task(void *param)
     memset(&response_buffers[client_index], 0, sizeof(response_buffer_t));
 
     // Mensaje de bienvenida optimizado
-    const char *welcome = 
-                        "\x1b[34m" // Yellow color
-                        "\x1b[1m\n"
-                        "      ___           ___                       ___           ___           ___     \n"
-                        "     /\\  \\         /\\__\\          ___        /\\__\\         /\\  \\         /\\  \\    \n"
-                        "    /::\\  \\       /::|  |        /\\  \\      /:/  /        /::\\  \\        \\:\\  \\   \n"
-                        "   /:/\\:\\  \\     /:|:|  |        \\:\\  \\    /:/  /        /:/\\:\\  \\        \\:\\  \\  \n"
-                        "  /::\\~\\:\\  \\   /:/|:|  |__      /::\\__\\  /:/  /  ___   /::\\~\\:\\  \\       /::\\  \\ \n"
-                        " /:/\\:\\ \\:\\__\\ /:/ |:| /\\__\\  __/:/\\/__/ /:/__/  /\\__\\ /:/\\:\\ \\:\\__\\     /:/\\:\\__\\\n"
-                        " \\/__\\:\\/:/  / \\/__|:|/:/  / /\\/:/  /    \\:\\  \\ /:/  / \\:\\~\\:\\ \\/__/    /:/  \\/__/\n"
-                        "      \\::/  /      |:/:/  /  \\::/__/      \\:\\  /:/  /   \\:\\ \\:\\__\\     /:/  /     \n"
-                        "      /:/  /       |::/  /    \\:\\__\\       \\:\\/:/  /     \\:\\ \\/__/     \\/__/      \n"
-                        "     /:/  /        /:/  /      \\/__/        \\::/  /       \\:\\__\\                  \n"
-                        "     \\/__/         \\/__/                     \\/__/         \\/__/                  \n"
-                        "\x1b[0m"
-                        "=== CONTROL SERVER v2.0 ===\n"
-                          "Comandos: 1_ON/OFF, 2_ON/OFF, 3_ON/OFF, 4_ON/OFF\n"
-                          "         ALL_ON, ALL_OFF, STATUS\n"
-                          "Listo para comandos...\n> ";
+    const char *welcome =
+        "\x1b[34m" // Yellow color
+        "\x1b[1m\n"
+        "      ___           ___                       ___           ___           ___     \n"
+        "     /\\  \\         /\\__\\          ___        /\\__\\         /\\  \\         /\\  \\    \n"
+        "    /::\\  \\       /::|  |        /\\  \\      /:/  /        /::\\  \\        \\:\\  \\   \n"
+        "   /:/\\:\\  \\     /:|:|  |        \\:\\  \\    /:/  /        /:/\\:\\  \\        \\:\\  \\  \n"
+        "  /::\\~\\:\\  \\   /:/|:|  |__      /::\\__\\  /:/  /  ___   /::\\~\\:\\  \\       /::\\  \\ \n"
+        " /:/\\:\\ \\:\\__\\ /:/ |:| /\\__\\  __/:/\\/__/ /:/__/  /\\__\\ /:/\\:\\ \\:\\__\\     /:/\\:\\__\\\n"
+        " \\/__\\:\\/:/  / \\/__|:|/:/  / /\\/:/  /    \\:\\  \\ /:/  / \\:\\~\\:\\ \\/__/    /:/  \\/__/\n"
+        "      \\::/  /      |:/:/  /  \\::/__/      \\:\\  /:/  /   \\:\\ \\:\\__\\     /:/  /     \n"
+        "      /:/  /       |::/  /    \\:\\__\\       \\:\\/:/  /     \\:\\ \\/__/     \\/__/      \n"
+        "     /:/  /        /:/  /      \\/__/        \\::/  /       \\:\\__\\                  \n"
+        "     \\/__/         \\/__/                     \\/__/         \\/__/                  \n"
+        "\x1b[0m"
+        "=== CONTROL SERVER v2.0 ===\n"
+        "Comandos: 1_ON/OFF, 2_ON/OFF, 3_ON/OFF, 4_ON/OFF\n"
+        "         ALL_ON, ALL_OFF, STATUS\n"
+        "Listo para comandos...\n> ";
     uint32_t bytes_sent;
     cy_socket_send(client->socket, welcome, strlen(welcome), CY_SOCKET_FLAGS_NONE, &bytes_sent);
 
@@ -485,7 +513,7 @@ static void accept_new_client(void)
 
                 if (task_result == pdPASS)
                 {
-                    printf("\x1b[1m");  
+                    printf("\x1b[1m");
                     printf("\x1b[3m");
                     printf("Nuevo cliente %lu conectado desde %lu.%lu.%lu.%lu (ranura %d)\n",
                            clients[client_index].client_id,
@@ -494,7 +522,7 @@ static void accept_new_client(void)
                            (peer_addr.ip_address.ip.v4 >> 16) & 0xFF,
                            (peer_addr.ip_address.ip.v4 >> 24) & 0xFF,
                            client_index);
-                    printf("\x1b[0m");  
+                    printf("\x1b[0m");
                 }
                 else
                 {
@@ -642,7 +670,6 @@ static void print_server_status(void)
         last_status_time = current_time;
     }
 }
-
 // FUNCIÃ“N PRINCIPAL DEL SERVIDOR
 void tarea_TCPserver(void *arg)
 {

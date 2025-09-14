@@ -3,7 +3,7 @@
 // Servidor config
 #define WIFI_SSID "Infinitum9609"
 #define WIFI_PASSWORD "ct5QY42dR9"
-#define TCP_PORT 50007
+#define TCP_PORT 599
 #define BUFFER_SIZE 256
 #define MAX_RETRIES 5
 #define MAX_CLIENTS 3

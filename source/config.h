@@ -1,8 +1,8 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 // Servidor config
-#define WIFI_SSID "Infinitum9609"
-#define WIFI_PASSWORD "ct5QY42dR9"
+#define WIFI_SSID "CLUB ROBITT"
+#define WIFI_PASSWORD "PIDESDIOS"
 #define TCP_PORT 599
 #define BUFFER_SIZE 256
 #define MAX_RETRIES 5
@@ -32,7 +32,7 @@
 #define AUDIO_BUFFER_SIZE 512
 #define SAMPLE_NORMALIZE(sample) (((float)(sample)) / (float)(1 << (AUIDO_BITS_PER_SAMPLE - 1)))
 // Disparador ML
-#define ML_TRIGGER_THRESHOLD 0.95f
+#define ML_TRIGGER_THRESHOLD 0.90f
 #define ML_TRIGGER_LABEL_INDEX 1
 
 #endif /* CONFIG_H */

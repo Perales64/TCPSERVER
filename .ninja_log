@@ -2946,3 +2946,13 @@
 932	1822	1757826022704695456	build/APP_CY8CKIT-062S2-AI/Debug/mtb-example-ml-deepcraft-deploy-audio.elf	f63bd4f48b935f1e
 178	1148	1757826083047964371	/home/emma/mtw/TCPSERVER/build/Debug/local/source/tcp_server.o	b92b638a4e8bd5ec
 1149	2117	1757826084018971026	build/APP_CY8CKIT-062S2-AI/Debug/mtb-example-ml-deepcraft-deploy-audio.elf	f63bd4f48b935f1e
+453	1662	1758137873566788717	/home/emma/mtw/TCPSERVER/build/Debug/local/source/control.o	869a0635b1c3de2d
+454	1662	1758137873567788775	/home/emma/mtw/TCPSERVER/build/Debug/local/source/ia.o	c7a6c3dff235fe65
+455	1733	1758137873568788832	/home/emma/mtw/TCPSERVER/build/Debug/local/source/main.o	f16f9c447819d09b
+460	1881	1758137873573789119	/home/emma/mtw/TCPSERVER/build/Debug/local/source/tcp_server.o	b92b638a4e8bd5ec
+1881	3469	1758137874994870916	build/APP_CY8CKIT-062S2-AI/Debug/mtb-example-ml-deepcraft-deploy-audio.elf	f63bd4f48b935f1e
+110	1121	1758138925246574975	/home/emma/mtw/TCPSERVER/build/Debug/local/source/control.o	869a0635b1c3de2d
+113	1223	1758138925250574471	/home/emma/mtw/TCPSERVER/build/Debug/local/source/main.o	f16f9c447819d09b
+118	1228	1758138925255573840	/home/emma/mtw/TCPSERVER/build/Debug/local/source/tcp_server.o	b92b638a4e8bd5ec
+111	1272	1758138925247574849	/home/emma/mtw/TCPSERVER/build/Debug/local/source/ia.o	c7a6c3dff235fe65
+1272	2423	1758138926408428539	build/APP_CY8CKIT-062S2-AI/Debug/mtb-example-ml-deepcraft-deploy-audio.elf	f63bd4f48b935f1e

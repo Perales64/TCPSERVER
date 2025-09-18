@@ -30,6 +30,18 @@ COLOR_CARD = "#1A1A1A"
 
 
 class KUKADashboard(ctk.CTk):
+    def clear_log(self):
+        if self.log_area is not None:
+            self.log_area.configure(state="normal")
+            self.log_area.delete("1.0", "end")
+            self.log_area.configure(state="disabled")
+    def send_custom_command(self):
+        cmd = self.command_entry.get().strip()
+        if cmd:
+            self.send_command(cmd)
+            self.command_entry.delete(0, 'end')
+        else:
+            self.add_log("[SISTEMA] El comando está vacío", "system")
     def __init__(self, server_ip, server_port):
         super().__init__()
         self.title("KUKA Robot Dashboard - Control y Monitoreo")
@@ -41,6 +53,9 @@ class KUKADashboard(ctk.CTk):
         self.status_thread_active = False
         self.last_message_time = 0
         self.connection_timeout = 5
+
+        # Inicializar log_area como None para evitar errores de acceso antes de su creación
+        self.log_area = None
 
         # Estado inicial del robot
         self.robot_status = {
@@ -154,7 +169,7 @@ class KUKADashboard(ctk.CTk):
             self.output_switches.append(switch)
             self.output_labels.append(output_label)
 
-    def create_log_panel(self, row, col):
+    def create_log_panel(self, row, col, columnspan=1):
         card = ctk.CTkFrame(self.grid_frame, fg_color=COLOR_CARD)
         card.grid(row=row, column=col, columnspan=columnspan, padx=5, pady=5, sticky="nsew")
         
@@ -302,22 +317,25 @@ class KUKADashboard(ctk.CTk):
     def add_log(self, message, msg_type="normal"):
         timestamp = datetime.now().strftime("%H:%M:%S")
         formatted_msg = f"[{timestamp}] {message}\n"
-        self.log_area.configure(state="normal")
-        if msg_type == "sent":
-            color = COLOR_SUCCESS
-        elif msg_type == "received":
-            color = COLOR_FG
-        elif msg_type == "error":
-            color = COLOR_ERROR
-        elif msg_type == "system":
-            color = COLOR_WARNING
-        else:
-            color = COLOR_TEXT
+        if self.log_area is not None:
+            self.log_area.configure(state="normal")
+            if msg_type == "sent":
+                color = COLOR_SUCCESS
+            elif msg_type == "received":
+                color = COLOR_FG
+            elif msg_type == "error":
+                color = COLOR_ERROR
+            elif msg_type == "system":
+                color = COLOR_WARNING
+            else:
+                color = COLOR_TEXT
 
-        self.log_area.tag_config(msg_type, foreground=color)
-        self.log_area.insert("end", formatted_msg, msg_type)
-        self.log_area.see("end")
-        self.log_area.configure(state="disabled")
+            self.log_area.tag_config(msg_type, foreground=color)
+            self.log_area.insert("end", formatted_msg, msg_type)
+            self.log_area.see("end")
+            self.log_area.configure(state="disabled")
+        else:
+            print(formatted_msg)
 
     def update_data_loop(self):
         while self.running:
@@ -354,4 +372,9 @@ class KUKADashboard(ctk.CTk):
 
 if __name__ == '__main__':
     app = KUKADashboard(DEFAULT_IP, DEFAULT_PORT)
-    app.mainloop()
+    try:
+        app.mainloop()
+    except Exception as e:
+        print(f"[ERROR] {e}")
+        if hasattr(app, 'destroy'):
+            app.destroy()

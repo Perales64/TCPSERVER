@@ -10,7 +10,7 @@ from PIL import Image
 
 BUFFER_SIZE = 1024
 DEFAULT_IP = '192.168.31.125'
-DEFAULT_PORT = 57345
+DEFAULT_PORT = 599
 
 # Configuración de tema personalizado
 ctk.set_appearance_mode("Dark")
@@ -30,11 +30,82 @@ COLOR_CARD = "#1A1A1A"
 
 
 class KUKADashboard(ctk.CTk):
+    def __init__(self, server_ip, server_port):
+        super().__init__()
+        self.title("KUKA Robot Dashboard - Control y Monitoreo")
+        self.geometry("1200x800")
+        self.server_ip = server_ip
+        self.server_port = server_port
+        
+        # Inicialización de variables de control de conexión
+        self.sock = None
+        self.sock_lock = threading.Lock()  # Mutex para proteger el socket
+        self.running = True
+        self.connection_active = False
+        self.listener_thread = None
+        self.reconnect_thread = None
+        
+        self.last_message_time = 0
+        self.connection_timeout = 10  # Aumentado el timeout
+        self.start_time = time.time()
+        
+        # Inicializar log_area como None para evitar errores de acceso antes de su creación
+        self.log_area = None
+
+        # Estado inicial del robot
+        self.robot_status = {
+            "connected": False,
+            "outputs": [False, False, False, False],
+            "temperature": 25,
+            "speed": 0,
+            "mode": "MANUAL",
+            "error_count": 0,
+            "last_command": "NONE",
+            "uptime": 0,
+            "all_outputs": False
+        }
+
+        self.configure(fg_color=COLOR_BG)
+        self.create_dashboard()
+        
+        # Hilos de actualización y monitor de conexión
+        threading.Thread(target=self.update_data_loop, daemon=True).start()
+        threading.Thread(target=self.connection_monitor, daemon=True).start()
+
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        
+        # Intentar conexión inicial
+        self.start_connection()
+
+    def safe_socket_close(self):
+        """Cerrar el socket de forma segura"""
+        with self.sock_lock:
+            if self.sock:
+                try:
+                    self.sock.shutdown(socket.SHUT_RDWR)
+                except:
+                    pass
+                try:
+                    self.sock.close()
+                except:
+                    pass
+                self.sock = None
+                self.connection_active = False
+
+    def start_connection(self):
+        """Iniciar conexión en un hilo separado"""
+        if self.reconnect_thread and self.reconnect_thread.is_alive():
+            return  # Ya hay un intento de conexión en curso
+            
+        self.reconnect_thread = threading.Thread(target=self.connect_to_server, daemon=True)
+        self.reconnect_thread.start()
+
     def clear_log(self):
         if self.log_area is not None:
             self.log_area.configure(state="normal")
             self.log_area.delete("1.0", "end")
             self.log_area.configure(state="disabled")
+
     def send_custom_command(self):
         cmd = self.command_entry.get().strip()
         if cmd:
@@ -42,47 +113,6 @@ class KUKADashboard(ctk.CTk):
             self.command_entry.delete(0, 'end')
         else:
             self.add_log("[SISTEMA] El comando está vacío", "system")
-    def __init__(self, server_ip, server_port):
-        super().__init__()
-        self.title("KUKA Robot Dashboard - Control y Monitoreo")
-        self.geometry("1200x800")
-        self.server_ip = server_ip
-        self.server_port = server_port
-        self.sock = None
-        self.running = True
-        self.status_thread_active = False
-        self.last_message_time = 0
-        self.connection_timeout = 5
-
-        # Inicializar log_area como None para evitar errores de acceso antes de su creación
-        self.log_area = None
-
-        # Estado inicial del robot
-        self.robot_status = {
-            "connected": False,  # Estado inicial: desconectado
-            "outputs": [False, False, False, False],  # Estado de las 4 salidas
-            "temperature": 25,
-            "speed": 0,
-            "mode": "MANUAL",
-            "error_count": 0,
-            "last_command": "NONE",
-            "uptime": 0,
-            "all_outputs": False  # Estado general de todas las salidas
-        }
-
-        self.configure(fg_color=COLOR_BG)
-        self.create_dashboard()
-
-        # Intento de conexión TCP
-        self.connect_to_server()
-        
-        # Iniciar hilo de comunicación
-        threading.Thread(target=self.listen_server, daemon=True).start()
-        # Hilos de actualización y monitor de conexión
-        threading.Thread(target=self.update_data_loop, daemon=True).start()
-        threading.Thread(target=self.connection_monitor, daemon=True).start()
-
-        self.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def create_dashboard(self):
         self.main_frame = ctk.CTkScrollableFrame(self, fg_color=COLOR_BG)
@@ -136,14 +166,14 @@ class KUKADashboard(ctk.CTk):
         self.grid_frame.grid_rowconfigure((0, 1, 2), weight=1)
         
         # Fila 1
-        self.create_control_panel(0, 0)  # Panel de control de salidas
-        self.create_system_info(0, 1)    # Información del sistema
+        self.create_control_panel(0, 0)
+        self.create_system_info(0, 1)
         
         # Fila 2
-        self.create_quick_commands(1, 0, columnspan=2) # Comandos rápidos expandido
+        self.create_quick_commands(1, 0, columnspan=2)
         
         # Fila 3
-        self.create_log_panel(2, 0, columnspan=2)  # Log
+        self.create_log_panel(2, 0, columnspan=2)
 
     def create_control_panel(self, row, col, columnspan=1):
         card = ctk.CTkFrame(self.grid_frame, fg_color=COLOR_CARD)
@@ -263,34 +293,75 @@ class KUKADashboard(ctk.CTk):
     
     # -------------------- Funciones de conexión TCP --------------------
     def connect_to_server(self):
+        """Conectar al servidor de forma segura"""
         try:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.settimeout(0.5)
-            self.sock.connect((self.server_ip, self.server_port))
+            # Cerrar conexión anterior si existe
+            self.safe_socket_close()
+            
+            self.add_log(f"[SISTEMA] Intentando conectar a {self.server_ip}:{self.server_port}...", "system")
+            
+            # Crear nuevo socket
+            new_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            new_socket.settimeout(10.0)  # Timeout para conexión
+            
+            # Intentar conectar
+            new_socket.connect((self.server_ip, self.server_port))
+            
+            # Si llegamos aquí, la conexión fue exitosa
+            with self.sock_lock:
+                self.sock = new_socket
+                self.connection_active = True
+                self.sock.settimeout(1.0)  # Timeout para operaciones de lectura
+            
             self.robot_status["connected"] = True
+            self.last_message_time = time.time()
             self.update_connection_status()
-            self.add_log(f"[SISTEMA] Conectado a {self.server_ip}:{self.server_port}", "system")
+            self.add_log(f"[SISTEMA] Conectado exitosamente a {self.server_ip}:{self.server_port}", "system")
 
             # Iniciar hilo de escucha
-            threading.Thread(target=self.listen_server, daemon=True).start()
+            self.listener_thread = threading.Thread(target=self.listen_server, daemon=True)
+            self.listener_thread.start()
 
         except Exception as e:
             self.robot_status["connected"] = False
+            self.connection_active = False
             self.update_connection_status()
-            messagebox.showwarning("Advertencia", f"No se pudo conectar al servidor: {e}")
+            self.add_log(f"[SISTEMA] Error de conexión: {e}", "error")
 
     def listen_server(self):
-        while self.running and self.robot_status["connected"]:
+        """Escuchar mensajes del servidor"""
+        while self.running and self.connection_active:
             try:
-                data = self.sock.recv(BUFFER_SIZE)
-                if not data:
+                with self.sock_lock:
+                    current_socket = self.sock
+                
+                if current_socket is None:
                     break
+                    
+                data = current_socket.recv(BUFFER_SIZE)
+                if not data:
+                    self.add_log("[SISTEMA] El servidor cerró la conexión", "error")
+                    break
+                    
                 msg = data.decode("utf-8").strip()
+                self.last_message_time = time.time()
                 self.add_log(f"[RECIBIDO] {msg}", "received")
 
-            except Exception as e:
-                self.add_log(f"[ERROR] Error de conexión: {e}", "error")
+            except socket.timeout:
+                # Timeout normal, continuar
+                continue
+            except socket.error as e:
+                if self.connection_active:  # Solo mostrar error si la conexión debería estar activa
+                    self.add_log(f"[ERROR] Error en socket: {e}", "error")
                 break
+            except Exception as e:
+                if self.connection_active:
+                    self.add_log(f"[ERROR] Error inesperado: {e}", "error")
+                break
+        
+        # Limpiar al salir del bucle
+        self.connection_active = False
+        self.robot_status["connected"] = False
 
     # -------------------- Control de salidas --------------------
     def toggle_output(self, idx):
@@ -306,67 +377,133 @@ class KUKADashboard(ctk.CTk):
             label.configure(text=f"Salida {i+1}: {'ON' if state else 'OFF'}", text_color=COLOR_SUCCESS if state else COLOR_ERROR)
 
     def send_command(self, cmd):
+        """Enviar comando al servidor de forma segura"""
         try:
-            if self.robot_status["connected"]:
-                self.sock.send(cmd.encode("utf-8"))
-                self.add_log(f"[ENVIADO] {cmd}", "sent")
+            with self.sock_lock:
+                current_socket = self.sock
+                is_connected = self.connection_active
+            
+            if is_connected and current_socket:
+                try:
+                    current_socket.send(cmd.encode("utf-8"))
+                    self.add_log(f"[ENVIADO] {cmd}", "sent")
+                    self.robot_status["last_command"] = cmd
+                except socket.error as e:
+                    self.add_log(f"[ERROR] Error enviando comando '{cmd}': {e}", "error")
+                    self.connection_active = False
+                    self.robot_status["connected"] = False
+            else:
+                self.add_log(f"[ERROR] No conectado - no se puede enviar '{cmd}'", "error")
         except Exception as e:
-            self.add_log(f"[ERROR] No se pudo enviar '{cmd}': {e}", "error")
+            self.add_log(f"[ERROR] Error inesperado enviando '{cmd}': {e}", "error")
 
     # -------------------- UI y logs --------------------
     def add_log(self, message, msg_type="normal"):
         timestamp = datetime.now().strftime("%H:%M:%S")
         formatted_msg = f"[{timestamp}] {message}\n"
+        
         if self.log_area is not None:
-            self.log_area.configure(state="normal")
-            if msg_type == "sent":
-                color = COLOR_SUCCESS
-            elif msg_type == "received":
-                color = COLOR_FG
-            elif msg_type == "error":
-                color = COLOR_ERROR
-            elif msg_type == "system":
-                color = COLOR_WARNING
-            else:
-                color = COLOR_TEXT
+            try:
+                self.log_area.configure(state="normal")
+                if msg_type == "sent":
+                    color = COLOR_SUCCESS
+                elif msg_type == "received":
+                    color = COLOR_FG
+                elif msg_type == "error":
+                    color = COLOR_ERROR
+                elif msg_type == "system":
+                    color = COLOR_WARNING
+                else:
+                    color = COLOR_TEXT
 
-            self.log_area.tag_config(msg_type, foreground=color)
-            self.log_area.insert("end", formatted_msg, msg_type)
-            self.log_area.see("end")
-            self.log_area.configure(state="disabled")
+                self.log_area.tag_config(msg_type, foreground=color)
+                self.log_area.insert("end", formatted_msg, msg_type)
+                self.log_area.see("end")
+                self.log_area.configure(state="disabled")
+            except Exception as e:
+                print(f"Error actualizando log: {e}")
         else:
             print(formatted_msg)
 
     def update_data_loop(self):
         while self.running:
-            self.update_display()
-            threading.Event().wait(1)
-
-    def update_display(self):
-        self.update_output_display()
-        self.update_connection_status()
-
-    def update_connection_status(self):
-        if self.robot_status["connected"]:
-            self.connection_status.configure(text="CONECTADO", text_color=COLOR_SUCCESS)
-        else:
-            self.connection_status.configure(text="DESCONECTADO", text_color=COLOR_ERROR)
-
-    def connection_monitor(self):
-        while self.running:
-            if self.robot_status["connected"] and self.last_message_time > 0:
-                import time
-                if time.time() - self.last_message_time > self.connection_timeout:
-                    self.robot_status["connected"] = False
-                    self.update_connection_status()
-                    self.add_log("[SISTEMA] Conexión perdida", "error")
-            import time
+            try:
+                self.update_display()
+            except Exception as e:
+                print(f"Error en update_data_loop: {e}")
             time.sleep(1)
 
+    def update_display(self):
+        try:
+            self.update_output_display()
+            self.update_connection_status()
+            self.update_time_display()
+        except Exception as e:
+            print(f"Error en update_display: {e}")
+
+    def update_time_display(self):
+        try:
+            # Actualizar hora actual
+            current_time = datetime.now().strftime("%H:%M:%S")
+            self.time_label.configure(text=current_time)
+            
+            # Actualizar uptime
+            uptime_seconds = int(time.time() - self.start_time)
+            hours = uptime_seconds // 3600
+            minutes = (uptime_seconds % 3600) // 60
+            seconds = uptime_seconds % 60
+            uptime_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            self.uptime_label.configure(text=uptime_str)
+        except Exception as e:
+            print(f"Error actualizando tiempo: {e}")
+
+    def update_connection_status(self):
+        try:
+            if self.robot_status["connected"]:
+                self.connection_status.configure(text="CONECTADO", text_color=COLOR_SUCCESS)
+            else:
+                self.connection_status.configure(text="DESCONECTADO", text_color=COLOR_ERROR)
+        except Exception as e:
+            print(f"Error actualizando estado de conexión: {e}")
+
+    def connection_monitor(self):
+        """Monitor de conexión con reintentos automáticos"""
+        while self.running:
+            try:
+                # Verificar timeout de mensajes
+                if (self.robot_status["connected"] and 
+                    self.last_message_time > 0 and 
+                    time.time() - self.last_message_time > self.connection_timeout):
+                    
+                    self.add_log("[SISTEMA] Timeout de conexión detectado", "error")
+                    self.connection_active = False
+                    self.robot_status["connected"] = False
+                    self.safe_socket_close()
+                
+                # Intentar reconexión si no está conectado
+                if not self.robot_status["connected"] and not self.connection_active:
+                    if (not self.reconnect_thread or 
+                        not self.reconnect_thread.is_alive()):
+                        self.add_log("[SISTEMA] Intentando reconexión...", "system")
+                        self.start_connection()
+                        time.sleep(5)  # Esperar antes del siguiente intento
+                        
+            except Exception as e:
+                print(f"Error en connection_monitor: {e}")
+            
+            time.sleep(2)  # Verificar cada 2 segundos
+
     def on_close(self):
+        """Limpiar recursos al cerrar la aplicación"""
         self.running = False
-        if self.sock:
-            self.sock.close()
+        self.connection_active = False
+        
+        # Cerrar socket de forma segura
+        self.safe_socket_close()
+        
+        # Esperar un momento para que los hilos terminen
+        time.sleep(0.5)
+        
         self.destroy()
 
 
